@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dashboard de Vendas com IA</title>
+<style>
+:root{--bg:#f6f7fb;--card:#fff;--tx:#14182b;--mu:#667;--bd:#e3e6f0;--ac:#4f46e5;--fc:#f59e0b;--an:#e11d48;--ok:#059669;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1221;--card:#181c33;--tx:#eef0fb;--mu:#9aa0c0;--bd:#2a2f4d;--ac:#818cf8;--fc:#fbbf24;--an:#fb7185;--ok:#34d399;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0f1221;--card:#181c33;--tx:#eef0fb;--mu:#9aa0c0;--bd:#2a2f4d;--ac:#818cf8;--fc:#fbbf24;--an:#fb7185;--ok:#34d399;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:980px;margin:0 auto;padding:24px 16px 40px}
+h1{font-size:1.5rem;margin:0}
+.sub{color:var(--mu);margin:4px 0 18px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+button{font:inherit;border:1px solid var(--bd);background:var(--card);color:var(--tx);padding:6px 12px;border-radius:999px;cursor:pointer}
+button.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-bottom:12px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px 16px}
+.k{color:var(--mu);font-size:.8rem;text-transform:uppercase;letter-spacing:.04em}
+.v{font-size:1.6rem;font-weight:700}
+.up{color:var(--ok)}.dn{color:var(--an)}
+h2{font-size:1rem;margin:0 0 8px}
+svg{width:100%;height:auto;display:block}
+.ax{fill:var(--mu);font-size:10px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;color:var(--mu);font-size:.8rem;margin-top:6px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px}
+ul{margin:0;padding-left:18px}li{margin:4px 0}
+.cols{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+.note{color:var(--mu);font-size:.8rem;margin-top:14px}
+</style>
+</head>
+<body>
+<main>
+<h1>Dashboard de Vendas com IA</h1>
+<p class="sub">Projeto de portfólio: análise de dados, previsão por regressão linear com sazonalidade e detecção de anomalias (z-score).</p>
+<div class="bar" id="regs"></div>
+<div class="bar" id="cats"></div>
+<div class="grid" id="kpis"></div>
+<div class="card" style="margin-bottom:12px">
+<h2>Receita mensal e previsão (6 meses)</h2>
+<svg id="line" viewBox="0 0 640 260" role="img" aria-label="Gráfico de linha da receita mensal com previsão"></svg>
+<div class="legend"><span><i style="background:var(--ac)"></i>Real</span><span><i style="background:var(--fc)"></i>Previsão</span><span><i style="background:var(--an)"></i>Anomalia</span></div>
+</div>
+<div class="cols">
+<div class="card"><h2>Receita por categoria</h2><svg id="bars" viewBox="0 0 320 170"></svg></div>
+<div class="card"><h2>Insights automáticos</h2><ul id="ins"></ul></div>
+</div>
+<p class="note">Dados sintéticos gerados no navegador para demonstração. Modelo: tendência linear + índice sazonal mensal; anomalia = resíduo com |z| &gt; 2.</p>
+</main>
+<script>
+const REG=["Todas","Sudeste","Sul","Nordeste","Centro-Oeste"],CAT=["Todas","Eletrônicos","Moda","Casa"];
+const MES=["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
+let seed=42;const rnd=()=>(seed=(seed*16807)%2147483647)/2147483647;
+const rb={Sudeste:1.6,Sul:1,Nordeste:0.9,"Centro-Oeste":0.6},cb={Eletrônicos:60,Moda:40,Casa:30},cg={Eletrônicos:.02,Moda:.012,Casa:.008};
+const D=[];
+for(let m=0;m<24;m++)for(const r of REG.slice(1))for(const c of CAT.slice(1)){
+ const s=1+0.25*Math.sin((m%12)/12*2*Math.PI+(c=="Moda"?1:0))+((m%12)==10?0.3:0);
+ let v=rb[r]*cb[c]*(1+cg[c]*m)*s*(0.94+rnd()*0.12);
+ if(m==15&&r=="Sudeste"&&c=="Eletrônicos")v*=0.55;
+ if(m==20&&r=="Sul"&&c=="Moda")v*=1.7;
+ D.push({m,r,c,v});}
+let fr="Todas",fc="Todas";
+const fmt=n=>"R$ "+(n>=1000?(n/1000).toFixed(1).replace(".",",")+" mi":n.toFixed(0)+" mil");
+const lab=m=>MES[m%12]+"/"+(24+Math.floor(m/12));
+function series(){const a=Array(24).fill(0);D.filter(d=>(fr=="Todas"||d.r==fr)&&(fc=="Todas"||d.c==fc)).forEach(d=>a[d.m]+=d.v);return a}
+function model(y){
+ const n=y.length,xs=[...y.keys()],mx=(n-1)/2,my=y.reduce((a,b)=>a+b)/n;
+ let sxy=0,sxx=0;xs.forEach(x=>{sxy+=(x-mx)*(y[x]-my);sxx+=(x-mx)**2});
+ const b=sxy/sxx,a=my-b*mx,res=y.map((v,i)=>v-(a+b*i));
+ const si=Array(12).fill(0),cn=Array(12).fill(0);res.forEach((r,i)=>{si[i%12]+=r;cn[i%12]++});
+ for(let k=0;k<12;k++)si[k]/=cn[k];
+ const fit=i=>a+b*i+si[i%12],e=y.map((v,i)=>v-fit(i)),sd=Math.sqrt(e.reduce((s,v)=>s+v*v,0)/n);
+ const ss=y.reduce((s,v)=>s+(v-my)**2,0),r2=1-e.reduce((s,v)=>s+v*v,0)/ss;
+ return{fit,z:e.map(v=>v/sd),r2,b}}
+function render(){
+ const y=series(),M=model(y),fc6=[...Array(6).keys()].map(i=>M.fit(24+i));
+ const tot=y.slice(12).reduce((a,b)=>a+b),prev=y.slice(0,12).reduce((a,b)=>a+b),g=(tot/prev-1)*100;
+ const f6=fc6.reduce((a,b)=>a+b),l6=y.slice(18).reduce((a,b)=>a+b),gf=(f6/l6-1)*100;
+ const an=M.z.map((z,i)=>({i,z})).filter(o=>Math.abs(o.z)>2);
+ const kp=[["Receita (últimos 12m)",fmt(tot),""],["Crescimento anual",(g>=0?"+":"")+g.toFixed(1)+"%",g>=0?"up":"dn"],["Previsão próx. 6 meses",fmt(f6),""],["Anomalias detectadas",an.length,an.length?"dn":"up"]];
+ document.getElementById("kpis").innerHTML=kp.map(k=>`<div class="card"><div class="k">${k[0]}</div><div class="v ${k[2]}">${k[1]}</div></div>`).join("");
+ // linha
+ const all=[...y,...fc6],mxv=Math.max(...all)*1.1,W=640,H=260,L=40,B=24,T=10;
+ const X=i=>L+i*(W-L-10)/29,Y=v=>T+(H-T-B)*(1-v/mxv);
+ let s=[0,.25,.5,.75,1].map(t=>`<line x1="${L}" x2="${W-10}" y1="${Y(mxv*t)}" y2="${Y(mxv*t)}" stroke="var(--bd)"/><text class="ax" x="${L-4}" y="${Y(mxv*t)+3}" text-anchor="end">${Math.round(mxv*t)}</text>`).join("");
+ for(let i=0;i<30;i+=3)s+=`<text class="ax" x="${X(i)}" y="${H-8}" text-anchor="middle">${lab(i)}</text>`;
+ s+=`<path d="${y.map((v,i)=>(i?"L":"M")+X(i)+" "+Y(v)).join("")}" fill="none" stroke="var(--ac)" stroke-width="2.5"/>`;
+ s+=`<path d="M${X(23)} ${Y(y[23])}${fc6.map((v,i)=>"L"+X(24+i)+" "+Y(v)).join("")}" fill="none" stroke="var(--fc)" stroke-width="2.5" stroke-dasharray="5 4"/>`;
+ an.forEach(o=>s+=`<circle cx="${X(o.i)}" cy="${Y(y[o.i])}" r="5" fill="var(--an)"><title>${lab(o.i)}: z=${o.z.toFixed(1)}</title></circle>`);
+ document.getElementById("line").innerHTML=s;
+ // barras
+ const cs=CAT.slice(1).map(c=>({c,v:D.filter(d=>d.m>=12&&d.c==c&&(fr=="Todas"||d.r==fr)).reduce((a,d)=>a+d.v,0)})),mc=Math.max(...cs.map(o=>o.v));
+ document.getElementById("bars").innerHTML=cs.map((o,i)=>`<text class="ax" x="0" y="${28+i*50}" style="font-size:12px">${o.c}</text><rect x="0" y="${34+i*50}" width="${Math.max(2,o.v/mc*270)}" height="18" rx="4" fill="${o.c==fc?"var(--fc)":"var(--ac)"}"/><text class="ax" x="${Math.max(2,o.v/mc*270)+6}" y="${48+i*50}">${fmt(o.v)}</text>`).join("");
+ const best=cs.slice().sort((a,b)=>b.v-a.v)[0],ins=[];
+ ins.push(`A receita ${g>=0?"cresceu":"caiu"} <b>${Math.abs(g).toFixed(1)}%</b> em relação aos 12 meses anteriores.`);
+ ins.push(`<b>${best.c}</b> lidera em receita${fr!="Todas"?" na região "+fr:""}, com ${(best.v/cs.reduce((a,o)=>a+o.v,0)*100).toFixed(0)}% do total.`);
+ ins.push(`O modelo prevê ${gf>=0?"alta":"queda"} de <b>${Math.abs(gf).toFixed(1)}%</b> nos próximos 6 meses vs. os 6 anteriores (R² = ${M.r2.toFixed(2)}).`);
+ ins.push(an.length?`Meses atípicos: ${an.map(o=>`<b>${lab(o.i)}</b> (${o.z>0?"acima":"abaixo"} do esperado)`).join(", ")}.`:"Nenhuma anomalia relevante neste recorte.");
+ document.getElementById("ins").innerHTML=ins.map(t=>`<li>${t}</li>`).join("");
+}
+function btns(id,arr,get,set){const el=document.getElementById(id);el.innerHTML=arr.map(a=>`<button class="${a==get()?"on":""}">${a}</button>`).join("");
+ [...el.children].forEach((b,i)=>b.onclick=()=>{set(arr[i]);btns(id,arr,get,set);render()})}
+btns("regs",REG,()=>fr,v=>fr=v);btns("cats",CAT,()=>fc,v=>fc=v);render();
+</script>
+</body>
+</html>
